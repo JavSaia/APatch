@@ -3,6 +3,9 @@
 import com.android.build.gradle.tasks.PackageApplication
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.net.URI
+// `java` is the Gradle JavaPluginExtension inside a .kts script, so the digest
+// class has to be imported explicitly rather than fully qualified.
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -265,7 +268,7 @@ tasks.register("verifyKpimg") {
     dependsOn("downloadKpimg")
     doLast {
         val kpimg = File("${project.projectDir}/src/main/assets/kpimg")
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
             .digest(kpimg.readBytes())
             .joinToString("") { "%02x".format(it) }
         require(digest == kpimgSha256) {
