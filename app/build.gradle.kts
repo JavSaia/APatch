@@ -235,12 +235,45 @@ fun downloadFileRetry(url: String, destFile: File, maxRetries: Int = 5) {
     }
 }
 
+// ---- kpimg source override (JavSaia fork) ----
+//
+// Upstream packages the kernel image from bmax121/KernelPatch/<kernelPatchVersion>.
+// This build uses the patched image from JavSaia/KernelPatch instead: its
+// selinux_hide feature publishes status.sequence/policyload and the access
+// response's seqno from one runtime counter (so policy_load == access seqno,
+// never 0/0) and answers queries naming a manager-private context
+// (untrusted_app -> magisk binder and friends) from the live policy instead of
+// failing with -EINVAL while the system is full of u:r:magisk:s0 labels --
+// exactly the tells the on-device detectors were reporting.
+//
+// Only kpimg is patched: kptools, the compat kpatch and the jailbreak .ko
+// files still come from upstream.  The image is built by KernelPatch CI
+// (workflow "Build kpimg", commit b233b3a) and pinned by hash here, so a
+// swapped release asset cannot be packaged silently.
+val kpimgReleaseRepo = "JavSaia/KernelPatch"
+val kpimgReleaseTag = "0.13.9-kp-selinux"
+val kpimgSha256 = "165f2c25b54187d4b8224186d867c59600993a5d9c442f62319f7e28a863b686"
+
 registerDownloadTask(
     taskName = "downloadKpimg",
-    srcUrl = "https://github.com/bmax121/KernelPatch/releases/download/$kernelPatchVersion/kpimg-android",
+    srcUrl = "https://github.com/$kpimgReleaseRepo/releases/download/$kpimgReleaseTag/kpimg-android",
     destPath = "${project.projectDir}/src/main/assets/kpimg",
     project = project
 )
+
+tasks.register("verifyKpimg") {
+    dependsOn("downloadKpimg")
+    doLast {
+        val kpimg = File("${project.projectDir}/src/main/assets/kpimg")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(kpimg.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        require(digest == kpimgSha256) {
+            "kpimg sha256 mismatch: $digest (expected $kpimgSha256) -- refusing to package a foreign kernel image"
+        }
+        println(" - kpimg sha256 verified: $digest")
+    }
+}
 
 registerDownloadTask(
     taskName = "downloadKptools",
@@ -295,6 +328,7 @@ tasks.register<Copy>("mergeScripts") {
 
 tasks.getByName("preBuild").dependsOn(
     "downloadKpimg",
+    "verifyKpimg",
     "downloadKptools",
     "downloadCompatKpatch",
     "downloadJailbreakKo",
