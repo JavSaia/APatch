@@ -251,11 +251,11 @@ fun downloadFileRetry(url: String, destFile: File, maxRetries: Int = 5) {
 //
 // Only kpimg is patched: kptools, the compat kpatch and the jailbreak .ko
 // files still come from upstream.  The image is built by KernelPatch CI
-// (workflow "Build kpimg", commit b233b3a) and pinned by hash here, so a
+// (workflow "Build kpimg", commit f9521ce) and pinned by hash here, so a
 // swapped release asset cannot be packaged silently.
 val kpimgReleaseRepo = "JavSaia/KernelPatch"
-val kpimgReleaseTag = "0.13.9-kp-selinux"
-val kpimgSha256 = "165f2c25b54187d4b8224186d867c59600993a5d9c442f62319f7e28a863b686"
+val kpimgReleaseTag = "0.13.9-kp-selinux-r2"
+val kpimgSha256 = "be7c7daf87a98c7dc6327262783c452d9db438248c4eea7758ba77481fa99b4f"
 
 registerDownloadTask(
     taskName = "downloadKpimg",
