@@ -45,7 +45,11 @@ fun getKernelPatchVersion(): String {
 }
 
 fun getBranch(): String {
-    return exec("git rev-parse --abbrev-ref HEAD").trim()
+    // The branch name is baked into base.archivesName, and AGP rejects an output
+    // file name that contains a path separator -- so a plain "fix/something"
+    // branch used to fail the build with "File paths are not supported when
+    // setting an output file name". Sanitize it here.
+    return exec("git rev-parse --abbrev-ref HEAD").trim().replace('/', '-')
 }
 
 fun getVersionName(): String {
