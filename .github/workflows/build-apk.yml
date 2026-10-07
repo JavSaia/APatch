@@ -1,8 +1,8 @@
 name: Build APatch (patched kpimg)
 
 # Upstream build.yml only uploads the APKs when the signing secrets are present
-# (they are not defined in this fork), so this workflow builds the same variants
-# and always uploads them.
+# (they are not defined in this fork), so this workflow builds the same variants,
+# signs them with the repository keystore and always uploads them.
 
 on:
   workflow_dispatch:
@@ -58,11 +58,56 @@ jobs:
           sha256sum app/src/main/assets/kpimg
           grep -n "kpimgReleaseTag\|kpimgSha256" app/build.gradle.kts
 
-      - name: Upload APKs
+      - name: Sign APKs
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
+          echo "build-tools: $BT"
+
+          KS="$RUNNER_TEMP/apatch.jks"
+          if [ -n "${SIGNING_KEY:-}" ]; then
+            echo " - keystore: repository secret (stable key, upgrades keep working)"
+            echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/apatch.p12"
+            keytool -importkeystore -noprompt \
+              -srckeystore "$RUNNER_TEMP/apatch.p12" -srcstoretype PKCS12 \
+              -srcalias "$KEY_ALIAS" -srcstorepass "$KEY_STORE_PASSWORD" -srckeypass "$KEY_PASSWORD" \
+              -destkeystore "$KS" -deststoretype JKS \
+              -destalias "$KEY_ALIAS" -deststorepass "$KEY_STORE_PASSWORD" -destkeypass "$KEY_PASSWORD"
+          else
+            echo " - keystore: none configured, generating a throwaway key for this run"
+            keytool -genkeypair -keystore "$KS" -storetype JKS -alias apatch \
+              -keyalg RSA -keysize 4096 -validity 10950 \
+              -storepass throwaway -keypass throwaway \
+              -dname "CN=APatch throwaway, O=JavSaia, C=CN"
+            KEY_ALIAS=apatch KEY_STORE_PASSWORD=throwaway KEY_PASSWORD=throwaway
+          fi
+
+          mkdir -p signed
+          for f in app/build/outputs/apk/*/*.apk; do
+            base=$(basename "$f")
+            "$BT/zipalign" -f -p 4 "$f" "$RUNNER_TEMP/aligned-$base"
+            "$BT/apksigner" sign \
+              --ks "$KS" --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass "pass:$KEY_STORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" \
+              --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --out "signed/$base" "$RUNNER_TEMP/aligned-$base"
+          done
+
+          for f in signed/*.apk; do
+            echo "=== $f"
+            "$BT/apksigner" verify --verbose --print-certs "$f" | grep -E "Verified|v2|v3|SHA-256 digest|Signer #1 certificate" | head -12
+          done
+          ls -l signed/
+
+      - name: Upload signed APKs
         uses: actions/upload-artifact@v4
         with:
-          name: APatch-patched-kpimg
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
-          if-no-files-found: warn
+          name: APatch-patched-kpimg-signed
+          path: signed/*.apk
+          if-no-files-found: error
