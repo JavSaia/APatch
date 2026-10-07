@@ -251,11 +251,19 @@ fun downloadFileRetry(url: String, destFile: File, maxRetries: Int = 5) {
 //
 // Only kpimg is patched: kptools, the compat kpatch and the jailbreak .ko
 // files still come from upstream.  The image is built by KernelPatch CI
-// (workflow "Build kpimg", commit f9521ce) and pinned by hash here, so a
+// (workflow "Build kpimg", commit a8a73f1) and pinned by hash here, so a
 // swapped release asset cannot be packaged silently.
+//
+// The kernel authorises this manager by certificate: is_trusted_manager_uid()
+// hashes the signing certificate DER of the installed APK and compares it with
+// the digest compiled into the image, and with a "su"-patched image that check
+// is the only authorisation path.  The image therefore carries the digest of
+// the key this APK is signed with (5adee997…c2c9); re-signing the APK with a
+// different key requires rebuilding kpimg with that key's digest, otherwise the
+// kernel rejects the manager and the app reports "not installed".
 val kpimgReleaseRepo = "JavSaia/KernelPatch"
-val kpimgReleaseTag = "0.13.9-kp-selinux-r2"
-val kpimgSha256 = "be7c7daf87a98c7dc6327262783c452d9db438248c4eea7758ba77481fa99b4f"
+val kpimgReleaseTag = "0.13.9-kp-selinux-r3"
+val kpimgSha256 = "a5f8571cdb62c9d59b471642eb3d821592e71419194919e5e72a9f0ea649d9ec"
 
 registerDownloadTask(
     taskName = "downloadKpimg",
